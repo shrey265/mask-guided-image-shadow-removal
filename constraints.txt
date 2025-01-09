@@ -1,0 +1,4 @@
+# Pins torch/torchvision so no later `pip install ... -c constraints.txt`
+# can silently upgrade/downgrade them into a mismatched pair.
+torch==2.5.1
+torchvision==0.20.1

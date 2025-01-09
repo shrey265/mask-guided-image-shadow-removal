@@ -1,0 +1,16 @@
+# ---------------------------------------------------------------------------
+# PyTorch pair (must be installed together, from the PyTorch index).
+# torchvision 0.20.1 is built specifically against torch 2.5.1 - never mix.
+#
+# Pick the index matching your NVIDIA driver (check `nvidia-smi`):
+#   CUDA 11.8 wheels (driver >= 520):  --index-url https://download.pytorch.org/whl/cu118
+#   CUDA 12.1 wheels (driver >= 530):  --index-url https://download.pytorch.org/whl/cu121
+#   CUDA 12.4 wheels (driver >= 550):  --index-url https://download.pytorch.org/whl/cu124
+#
+#   pip install -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cu121
+#
+# The wheels bundle their own CUDA runtime + cuDNN; no system CUDA toolkit is
+# needed, only a recent enough driver. Python 3.9 - 3.12 supported.
+# ---------------------------------------------------------------------------
+torch==2.5.1
+torchvision==0.20.1
