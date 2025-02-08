@@ -1,0 +1,78 @@
+# Mask-guided shadow removal on ISTD.
+# Any value can be overridden from the CLI:  --opts train.lr=1.0e-4 model.detector.enabled=false
+
+experiment:
+  name: istd_maskguided_unet
+  output_dir: outputs
+  seed: 42
+  deterministic: false
+
+data:
+  root: data/ISTD_Dataset
+  train_split: train
+  test_split: test
+  shadow_dir: "{split}_A"        # shadow images
+  mask_dir: "{split}_B"          # binary shadow masks
+  gt_dir: "{split}_C"            # shadow-free ground truth (ISTD+: "{split}_C_fixed_ours")
+  val_ratio: 0.1                 # held out from train
+  split_by_scene: true           # scene-disjoint train/val (no background leakage)
+  load_size: null                # [H, W] resize before cropping during training (null = native 480x640)
+  crop_size: 256                 # random crop size for training
+  eval_size: null                # [H, W] for val/test (null = native resolution; [256, 256] for the common protocol)
+  hflip: true
+  vflip: false
+  mask_threshold: 0.5
+  num_workers: 4
+
+model:
+  base_channels: 64
+  depth: 4
+  norm: bn                       # bn | in | gn | none
+  mask_guided_skips: true        # mask-conditioned attention gates on every skip connection
+  residual: true                 # output = input + predicted residual
+  composite_output: false        # keep non-shadow pixels from the input (off for ISTD: its GT has colour shift)
+  composite_dilate: 7
+  dropout: 0.0
+  detector:                      # shadow detection branch (lets the model run without a GT mask)
+    enabled: true
+    base_channels: 32
+    depth: 4
+
+loss:
+  l1: 1.0
+  shadow_l1: 1.0
+  ssim: 0.5
+  gradient: 0.2
+  perceptual: 0.05               # set 0 to skip VGG16 (requires downloading ImageNet weights once)
+  mask_bce: 0.5
+  mask_dice: 0.5
+
+train:
+  epochs: 200
+  batch_size: 8
+  optimizer: adamw               # adam | adamw
+  lr: 2.0e-4
+  min_lr_ratio: 0.01             # cosine decays to lr * min_lr_ratio
+  weight_decay: 1.0e-4
+  betas: [0.9, 0.999]
+  warmup_epochs: 3
+  grad_clip: 1.0                 # 0 = off
+  amp: bf16                      # none | fp16 | bf16 (falls back to fp16 if bf16 unsupported)
+  pred_mask_prob: 0.2            # chance a batch is guided by the detector's mask instead of the GT mask
+  val_every: 5                   # epochs
+  val_mask_source: gt
+  best_metric: psnr_all          # any column of the val summary (mae*/ber are minimised automatically)
+  early_stop_patience: 0         # number of validations without improvement; 0 = off
+  save_every: 20                 # extra snapshot every N epochs (0 = only last/best)
+  num_val_vis: 4
+  log_every: 50                  # iterations
+  run_test_after_train: true
+
+test:
+  mask_sources: [gt, pred]       # evaluate with the GT mask and with the detector's predicted mask
+  save_images: true
+  num_vis: 20
+  num_extremes: 5
+
+analysis:
+  bin_edges: {}                  # e.g. {shadow_intensity: [0, 0.4, 0.6, 1]}; default = tertiles

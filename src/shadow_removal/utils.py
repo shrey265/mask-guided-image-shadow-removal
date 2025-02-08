@@ -16,6 +16,10 @@ def load_config(path, overrides=None):
     """Load YAML and apply dotted overrides, e.g. ['train.lr=1e-4', 'model.detector.enabled=false']."""
     with open(path) as f:
         cfg = yaml.safe_load(f)
+    return apply_overrides(cfg, overrides)
+
+
+def apply_overrides(cfg, overrides=None):
     for ov in overrides or []:
         if "=" not in ov:
             raise ValueError(f"Override '{ov}' must look like key.subkey=value")
