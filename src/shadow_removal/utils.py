@@ -95,7 +95,8 @@ def resolve_amp(device, amp_cfg):
     if device.type != "cuda" or not amp_cfg or amp_cfg in ("none", False):
         return False, torch.float32
     if amp_cfg == "bf16":
-        if torch.cuda.is_bf16_supported():
+        # native bf16 needs Ampere+ (cc >= 8.0); recent torch reports emulated (slow) bf16 on T4/V100
+        if torch.cuda.get_device_capability(device)[0] >= 8 and torch.cuda.is_bf16_supported():
             return True, torch.bfloat16
         amp_cfg = "fp16"
     if amp_cfg == "fp16":
