@@ -54,6 +54,14 @@ bash scripts/download_istd.sh /path/ISTD_Dataset.rar  # or point it at an archiv
 
 If the Google Drive download fails because of quota limits, download the archive by hand from the [ST-CGAN repo](https://github.com/DeepInsight-PCALab/ST-CGAN) and pass it to the script.
 
+## Google Colab
+
+1. Upload this folder to Google Drive as `MyDrive/Image-Shadow-Removal`.
+2. Open [Shadow_Removal_Colab.ipynb](Shadow_Removal_Colab.ipynb) in Colab and choose `Runtime → Change runtime type → GPU`.
+3. Run the cells in order: setup → data → configure → train + validate → validation results → test results → analysis → visuals → inference → download.
+
+The notebook keeps Colab's preinstalled torch and torchvision (already a matching pair) and installs only packages that are missing. Mixed precision is chosen automatically: fp16 on T4, bf16 on A100 or L4. Runs are saved to Drive, and a resume cell continues training after a disconnect. Set `QUICK_RUN = True` for a 2-epoch smoke test.
+
 ## 3. Installation (no torch version conflicts)
 
 `torch` and `torchvision` are **installed separately, as a pinned matching pair** (2.5.1 / 0.20.1) from the official PyTorch wheel index. Nothing in `requirements.txt` depends on torch, and `constraints.txt` pins the pair, so a later `pip install` cannot swap in a mismatched torch.
