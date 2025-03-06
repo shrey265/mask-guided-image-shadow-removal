@@ -48,7 +48,7 @@ Each triplet is `*_A` (shadow image), `*_B` (shadow mask) and `*_C` (shadow-free
 > To use **ISTD+** (the colour-adjusted ground truth of Le & Samaras 2019), set `data.gt_dir="{split}_C_fixed_ours"`.
 
 ```bash
-bash scripts/download_istd.sh                       # -> data/ISTD_Dataset (needs 7z / unrar)
+bash scripts/download_istd.sh                       # -> data/ISTD_Dataset (RAR5: uses unrar, else official 7-Zip)
 bash scripts/download_istd.sh /path/ISTD_Dataset.rar  # or point it at an archive you already have
 ```
 
