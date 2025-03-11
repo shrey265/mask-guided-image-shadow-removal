@@ -149,7 +149,7 @@ def write_report(path, summary, strat, edges, mask_source, split, extra=None):
 def run_test(model, cfg, dataset, device, out_dir, mask_source="gt", amp=(False, torch.float32),
              save_images=True, num_vis=20, num_extremes=5, logger=None, split="test"):
     """Full evaluation + analysis + report. Returns the summary dict."""
-    log = logger.info if logger else print
+    log = getattr(logger, "info", logger) or print  # accepts a Logger or a plain function
     os.makedirs(out_dir, exist_ok=True)
     loader = build_loader(dataset, batch_size=1, shuffle=False,
                           num_workers=cfg["data"].get("num_workers", 4), seed=cfg["experiment"]["seed"])

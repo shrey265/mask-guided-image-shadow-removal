@@ -115,7 +115,7 @@ def main():
     ckpt_dir = os.path.join(run_dir, "checkpoints")
     os.makedirs(ckpt_dir, exist_ok=True)
     save_config(cfg, os.path.join(run_dir, "config.yaml"))
-    log = get_logger(os.path.join(run_dir, "train.log"))
+    log = get_logger(os.path.join(run_dir, "train.log")).info
 
     tcfg, dcfg = cfg["train"], cfg["data"]
     set_seed(cfg["experiment"]["seed"], cfg["experiment"].get("deterministic", False))

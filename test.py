@@ -45,7 +45,7 @@ def main():
     run_dir = os.path.dirname(os.path.dirname(os.path.abspath(args.checkpoint)))
     out_root = args.out_dir or os.path.join(run_dir, "results")
     os.makedirs(out_root, exist_ok=True)
-    log = get_logger(os.path.join(out_root, "test.log"), name="shadow_removal.test")
+    log = get_logger(os.path.join(out_root, "test.log"), name="shadow_removal.test").info
     amp = resolve_amp(device, args.amp or cfg["train"].get("amp", "none"))
     log(f"Checkpoint: {args.checkpoint} (epoch {ckpt.get('epoch')}) | device {describe_device(device)}")
 
