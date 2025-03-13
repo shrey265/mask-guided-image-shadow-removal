@@ -7,11 +7,26 @@
 #   bash setup_env.sh cu118           # CUDA 11.8 wheels (older drivers)
 #   bash setup_env.sh cpu             # CPU only
 #   VENV_DIR=/path/to/env bash setup_env.sh cu121
+#   bash setup_env.sh cu121 --data-dir /mnt/shadow   # pip's download cache (~2-3 GB of torch
+#                                                    # wheels) goes to /mnt/shadow/cache/pip
 set -euo pipefail
 
-CUDA_TAG="${1:-cu121}"
+CUDA_TAG="cu121"
+DATA_DIR="${SHADOW_DATA_DIR:-}"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --data-dir) DATA_DIR="${2:?--data-dir needs a path}"; shift 2 ;;
+    --data-dir=*) DATA_DIR="${1#*=}"; shift ;;
+    *) CUDA_TAG="$1"; shift ;;
+  esac
+done
 VENV_DIR="${VENV_DIR:-.venv}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+if [ -n "$DATA_DIR" ]; then
+  mkdir -p "$DATA_DIR/cache/pip"
+  export PIP_CACHE_DIR="$(cd "$DATA_DIR" && pwd)/cache/pip"
+  echo "pip cache -> $PIP_CACHE_DIR"
+fi
 
 case "$CUDA_TAG" in
   cu118|cu121|cu124|cpu) ;;
@@ -46,7 +61,7 @@ echo "== Installing remaining dependencies (torch pinned via constraints) =="
 pip install -r requirements.txt -c constraints.txt
 
 echo "== Verifying environment =="
-python check_env.py
+if [ -n "$DATA_DIR" ]; then python check_env.py --data-dir "$DATA_DIR"; else python check_env.py; fi
 
 echo
 echo "Done. Activate with:  source $VENV_DIR/bin/activate"

@@ -3,6 +3,7 @@
     python train.py --config configs/istd.yaml --gpu 0
     python train.py --config configs/istd.yaml --gpu 3 --opts train.batch_size=16 train.epochs=300
     python train.py --resume outputs/<run>/checkpoints/last.pth --gpu 0
+    python train.py --data-dir /mnt/shadow --gpu 0     # dataset, runs, checkpoints, caches -> /mnt/shadow
 """
 import argparse
 import math
@@ -22,9 +23,10 @@ from shadow_removal.evaluation import evaluate, run_test, summarize  # noqa: E40
 from shadow_removal.losses import ShadowRemovalLoss  # noqa: E402
 from shadow_removal.metrics import is_lower_better  # noqa: E402
 from shadow_removal.models import ShadowRemovalNet, count_parameters  # noqa: E402
-from shadow_removal.utils import (MeterDict, add_device_args, autocast, describe_device,  # noqa: E402
-                                  get_logger, load_checkpoint, load_config, make_grad_scaler,
-                                  resolve_amp, save_checkpoint, save_config, select_device, set_seed)
+from shadow_removal.utils import (MeterDict, add_data_dir_arg, add_device_args, apply_data_dir,  # noqa: E402
+                                  autocast, describe_device, get_logger, load_checkpoint, load_config,
+                                  make_grad_scaler, resolve_amp, resolve_path, save_checkpoint,
+                                  save_config, select_device, set_seed, setup_data_dir)
 
 
 def parse_args():
@@ -34,6 +36,7 @@ def parse_args():
     p.add_argument("--exp-name", default=None, help="override experiment.name")
     p.add_argument("--opts", nargs="*", default=[], help="config overrides: key.sub=value")
     add_device_args(p)
+    add_data_dir_arg(p)
     return p.parse_args()
 
 
@@ -101,13 +104,15 @@ def plot_history(hist_csv, out_png):
 
 def main():
     args = parse_args()
+    data_root = setup_data_dir(args.data_dir)
     resume_ckpt = None
     if args.resume:
+        args.resume = resolve_path(args.resume, data_root)
         resume_ckpt = load_checkpoint(args.resume)
-        cfg = resume_ckpt["config"]
+        cfg = apply_data_dir(resume_ckpt["config"], data_root)
         run_dir = os.path.dirname(os.path.dirname(os.path.abspath(args.resume)))
     else:
-        cfg = load_config(args.config, args.opts)
+        cfg = load_config(args.config, args.opts, data_root)
         if args.exp_name:
             cfg["experiment"]["name"] = args.exp_name
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -122,6 +127,7 @@ def main():
     device = select_device(args.gpu)
     amp = resolve_amp(device, tcfg.get("amp", "none"))
     log(f"Run dir: {run_dir}")
+    log(f"Dataset: {cfg['data']['root']}" + (f" | data dir: {data_root}" if data_root else ""))
     log(f"Device: {describe_device(device)} | torch {torch.__version__} | AMP: {amp[0]} {amp[1]}")
 
     # ---------------------------------------------------------------- data

@@ -12,11 +12,62 @@ from PIL import Image, ImageDraw
 
 
 # ----------------------------------------------------------------------------- config
-def load_config(path, overrides=None):
-    """Load YAML and apply dotted overrides, e.g. ['train.lr=1e-4', 'model.detector.enabled=false']."""
+def load_config(path, overrides=None, data_dir=None):
+    """Load YAML, point it at ``data_dir`` (if given), then apply dotted overrides,
+    e.g. ['train.lr=1e-4', 'model.detector.enabled=false']. Overrides win over data_dir."""
     with open(path) as f:
         cfg = yaml.safe_load(f)
+    apply_data_dir(cfg, data_dir)
     return apply_overrides(cfg, overrides)
+
+
+# ----------------------------------------------------------------------------- data dir
+DATA_DIR_ENV = "SHADOW_DATA_DIR"
+
+
+def add_data_dir_arg(parser):
+    parser.add_argument(
+        "--data-dir", default=os.environ.get(DATA_DIR_ENV),
+        help="single folder for everything the project writes: dataset (<dir>/ISTD_Dataset), "
+             "runs/checkpoints/results (<dir>/outputs) and library caches such as the VGG16 weights "
+             f"(<dir>/cache). Default: ${DATA_DIR_ENV}, else ./data and ./outputs")
+
+
+def setup_data_dir(data_dir):
+    """Create the data-dir layout and redirect library caches into it.
+
+    Must run before torch.hub downloads (VGG16 weights) and before matplotlib is imported.
+    Returns the absolute path, or None when no data dir was given.
+    """
+    if not data_dir:
+        return None
+    root = os.path.abspath(os.path.expanduser(data_dir))
+    cache = os.path.join(root, "cache")
+    for sub in ("outputs", "cache/torch/hub", "cache/matplotlib"):
+        os.makedirs(os.path.join(root, sub), exist_ok=True)
+    os.environ["TORCH_HOME"] = os.path.join(cache, "torch")      # pretrained weights
+    os.environ["MPLCONFIGDIR"] = os.path.join(cache, "matplotlib")  # matplotlib font cache
+    os.environ["XDG_CACHE_HOME"] = cache                          # other well-behaved libraries
+    torch.hub.set_dir(os.path.join(cache, "torch", "hub"))
+    os.environ[DATA_DIR_ENV] = root                               # inherited by DataLoader workers
+    return root
+
+
+def apply_data_dir(cfg, root):
+    """Point dataset + outputs of a config at ``root`` (no-op when root is None)."""
+    if root:
+        ds_name = os.path.basename(os.path.normpath(cfg["data"]["root"])) or "ISTD_Dataset"
+        cfg["data"]["root"] = os.path.join(root, ds_name)
+        cfg["experiment"]["output_dir"] = os.path.join(root, "outputs")
+        cfg["experiment"]["data_dir"] = root
+    return cfg
+
+
+def resolve_path(path, root):
+    """Allow paths relative to the data dir, e.g. --checkpoint outputs/<run>/checkpoints/best.pth."""
+    if path and not os.path.exists(path) and root and os.path.exists(os.path.join(root, path)):
+        return os.path.join(root, path)
+    return path
 
 
 def apply_overrides(cfg, overrides=None):

@@ -91,6 +91,36 @@ python check_env.py
 
 Python 3.9–3.12. The wheels ship their own CUDA runtime and cuDNN, so the server only needs a recent enough driver, not a CUDA toolkit.
 
+## Keeping everything in one folder (`--data-dir`)
+
+Every script accepts `--data-dir DIR`. With it, everything the project downloads or writes goes under that one folder and nowhere else:
+
+```
+DIR/
+├── ISTD_Dataset/        dataset (plus the downloaded .rar)
+├── outputs/<run>/       config, logs, checkpoints, val visuals, test results
+├── inference/           infer.py outputs (default)
+└── cache/
+    ├── torch/hub/       VGG16 weights for the perceptual loss (TORCH_HOME)
+    ├── matplotlib/      font cache (MPLCONFIGDIR)
+    └── pip/             torch wheels, when setup_env.sh is given --data-dir
+```
+
+```bash
+bash setup_env.sh cu121 --data-dir /mnt/shadow
+bash scripts/download_istd.sh --data-dir /mnt/shadow
+python train.py --data-dir /mnt/shadow --gpu 2
+python test.py  --data-dir /mnt/shadow --checkpoint outputs/<run>/checkpoints/best.pth --gpu 2
+python infer.py --data-dir /mnt/shadow --checkpoint outputs/<run>/checkpoints/best.pth --input photos/ --gpu 2
+bash scripts/run_pipeline.sh --gpu 2 --data-dir /mnt/shadow      # all of the above in one go
+
+export SHADOW_DATA_DIR=/mnt/shadow                               # or set it once for every script
+```
+
+- `--checkpoint` and `--resume` paths can be relative to the data dir.
+- Explicit `--opts data.root=...` or `--opts experiment.output_dir=...` still override it.
+- Without `--data-dir`, the defaults are `./data/ISTD_Dataset` and `./outputs`.
+
 ## 4. Choosing one GPU on a multi-GPU server
 
 Every script runs on **exactly one** device, chosen with `--gpu`:

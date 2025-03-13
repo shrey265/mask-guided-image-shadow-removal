@@ -3,6 +3,7 @@
     python test.py --checkpoint outputs/<run>/checkpoints/best.pth --gpu 0
     python test.py --checkpoint best.pth --gpu 1 --split val --mask-source pred
     python test.py --checkpoint best.pth --gpu 0 --opts data.eval_size=[256,256]   # 256x256 protocol
+    python test.py --data-dir /mnt/shadow --checkpoint outputs/<run>/checkpoints/best.pth --gpu 0
 
 Writes, per mask source, to <out-dir>/<split>_<source>/:
     summary.json, report.md, per_image_metrics.csv, per_scene_metrics.csv,
@@ -19,8 +20,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src
 
 from shadow_removal.data import build_datasets  # noqa: E402
 from shadow_removal.evaluation import load_model_from_checkpoint, run_test  # noqa: E402
-from shadow_removal.utils import (add_device_args, apply_overrides, describe_device,  # noqa: E402
-                                  get_logger, load_config, resolve_amp, select_device, set_seed)
+from shadow_removal.utils import (add_data_dir_arg, add_device_args, apply_data_dir,  # noqa: E402
+                                  apply_overrides, describe_device, get_logger, load_config,
+                                  resolve_amp, resolve_path, select_device, set_seed, setup_data_dir)
 
 
 def main():
@@ -29,21 +31,34 @@ def main():
     p.add_argument("--config", default=None, help="optional config (default: the one stored in the checkpoint)")
     p.add_argument("--split", default="test", choices=["test", "val"])
     p.add_argument("--mask-source", default="both", choices=["gt", "pred", "both"])
-    p.add_argument("--out-dir", default=None, help="default: <run dir>/results")
+    p.add_argument("--out-dir", default=None,
+                   help="default: <run dir>/results (inside --data-dir when one is given)")
     p.add_argument("--no-save-images", action="store_true")
     p.add_argument("--num-vis", type=int, default=20)
     p.add_argument("--amp", default=None, choices=["none", "fp16", "bf16"], help="default: as trained")
     p.add_argument("--opts", nargs="*", default=[], help="config overrides, e.g. data.root=/data/ISTD")
     add_device_args(p)
+    add_data_dir_arg(p)
     args = p.parse_args()
 
+    data_root = setup_data_dir(args.data_dir)
+    args.checkpoint = resolve_path(args.checkpoint, data_root)
     device = select_device(args.gpu)
     model, ckpt_cfg, ckpt = load_model_from_checkpoint(args.checkpoint, device)
-    cfg = load_config(args.config, args.opts) if args.config else apply_overrides(ckpt_cfg, args.opts)
+    if args.config:
+        cfg = load_config(args.config, args.opts, data_root)
+    else:
+        cfg = apply_overrides(apply_data_dir(ckpt_cfg, data_root), args.opts)
     set_seed(cfg["experiment"]["seed"])
 
     run_dir = os.path.dirname(os.path.dirname(os.path.abspath(args.checkpoint)))
-    out_root = args.out_dir or os.path.join(run_dir, "results")
+    if args.out_dir:
+        out_root = args.out_dir
+    elif data_root and os.path.commonpath([run_dir, data_root]) != data_root:
+        # checkpoint lives outside the data dir -> keep results inside it anyway
+        out_root = os.path.join(data_root, "outputs", os.path.basename(run_dir), "results")
+    else:
+        out_root = os.path.join(run_dir, "results")
     os.makedirs(out_root, exist_ok=True)
     log = get_logger(os.path.join(out_root, "test.log"), name="shadow_removal.test").info
     amp = resolve_amp(device, args.amp or cfg["train"].get("amp", "none"))

@@ -4,7 +4,9 @@
 #
 # Usage:
 #   bash scripts/download_istd.sh                 # -> data/ISTD_Dataset
-#   DATA_DIR=/mnt/datasets bash scripts/download_istd.sh
+#   bash scripts/download_istd.sh --data-dir /mnt/shadow           # -> /mnt/shadow/ISTD_Dataset
+#   bash scripts/download_istd.sh --data-dir /mnt/shadow /path/ISTD_Dataset.rar
+#   (also honours $DATA_DIR or $SHADOW_DATA_DIR; --data-dir wins)
 #   ISTD_GDRIVE_ID=<id> bash scripts/download_istd.sh   # if the default link moves
 #   bash scripts/download_istd.sh /path/to/ISTD_Dataset.rar   # use an archive you already have
 #
@@ -13,7 +15,16 @@
 # that page and pass its path as the first argument.
 set -euo pipefail
 
-DATA_DIR="${DATA_DIR:-data}"
+DATA_DIR="${DATA_DIR:-${SHADOW_DATA_DIR:-data}}"
+ARCHIVE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --data-dir) DATA_DIR="${2:?--data-dir needs a path}"; shift 2 ;;
+    --data-dir=*) DATA_DIR="${1#*=}"; shift ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
+    *) ARCHIVE="$1"; shift ;;
+  esac
+done
 GDRIVE_ID="${ISTD_GDRIVE_ID:-1I0qw-65KBA6np8vIZzO6oeiOvcDBttAY}"
 mkdir -p "$DATA_DIR"
 
@@ -33,7 +44,6 @@ elif [ -d "$DATA_DIR/ISTD_Dataset" ]; then
   rm -rf "$DATA_DIR/ISTD_Dataset"
 fi
 
-ARCHIVE="${1:-}"
 if [ -z "$ARCHIVE" ]; then
   ARCHIVE="$DATA_DIR/ISTD_Dataset.rar"
   if [ ! -f "$ARCHIVE" ]; then
@@ -41,7 +51,7 @@ if [ -z "$ARCHIVE" ]; then
     if ! python -m gdown "$GDRIVE_ID" -O "$ARCHIVE"; then
       echo "Automatic download failed. Download ISTD manually from"
       echo "  https://github.com/DeepInsight-PCALab/ST-CGAN"
-      echo "then run: bash scripts/download_istd.sh /path/to/ISTD_Dataset.rar"
+      echo "then run: bash scripts/download_istd.sh --data-dir $DATA_DIR /path/to/ISTD_Dataset.rar"
       exit 1
     fi
   fi

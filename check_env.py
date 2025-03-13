@@ -5,16 +5,35 @@
 """
 import argparse
 import importlib
+import os
+import shutil
 import sys
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--gpu", type=int, default=None, help="only test this CUDA device index")
+    parser.add_argument("--data-dir", default=os.environ.get("SHADOW_DATA_DIR"),
+                        help="check that this folder is writable and has enough free space")
     args = parser.parse_args()
 
     ok = True
     print(f"Python      : {sys.version.split()[0]}")
+    if args.data_dir:
+        d = os.path.abspath(os.path.expanduser(args.data_dir))
+        try:
+            os.makedirs(d, exist_ok=True)
+            probe = os.path.join(d, ".write_test")
+            with open(probe, "w") as f:
+                f.write("ok")
+            os.remove(probe)
+            free = shutil.disk_usage(d).free / 1024 ** 3
+            # ISTD ~1.5 GB extracted + archive; each run ~2-4 GB (checkpoints + restored images)
+            status = "[ OK ]" if free >= 10 else "[WARN]"
+            print(f"{status} data dir {d} is writable, {free:.1f} GB free (>= 10 GB recommended)")
+        except OSError as e:
+            print(f"[FAIL] data dir {d} is not writable: {e}")
+            ok = False
     try:
         import torch
         import torchvision
