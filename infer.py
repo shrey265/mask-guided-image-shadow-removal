@@ -11,18 +11,14 @@ import argparse
 import os
 import sys
 
-import numpy as np
-import torch
-from PIL import Image
 from tqdm import tqdm
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
-from shadow_removal.data import IMG_EXTS, _to_tensor  # noqa: E402
-from shadow_removal.evaluation import load_model_from_checkpoint  # noqa: E402
-from shadow_removal.utils import (add_data_dir_arg, add_device_args, autocast, resolve_amp,  # noqa: E402
-                                  resolve_path, save_comparison, save_image, select_device,
-                                  setup_data_dir, to_uint8)
+from shadow_removal.data import IMG_EXTS  # noqa: E402
+from shadow_removal.inference import ShadowRemover, load_image  # noqa: E402
+from shadow_removal.utils import (add_data_dir_arg, add_device_args, resolve_path,  # noqa: E402
+                                  save_comparison, save_image, select_device, setup_data_dir, to_uint8)
 
 
 def list_images(path):
@@ -39,7 +35,6 @@ def find_mask(mask_dir, stem):
     return None
 
 
-@torch.no_grad()
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--checkpoint", required=True)
@@ -57,41 +52,24 @@ def main():
     args.checkpoint = resolve_path(args.checkpoint, data_root)
     if args.output is None:
         args.output = os.path.join(data_root, "inference") if data_root else "inference_results"
-    device = select_device(args.gpu)
-    model, cfg, _ = load_model_from_checkpoint(args.checkpoint, device)
-    amp = resolve_amp(device, cfg["train"].get("amp", "none"))
+    remover = ShadowRemover(args.checkpoint, select_device(args.gpu))
     os.makedirs(args.output, exist_ok=True)
 
     for path in tqdm(list_images(args.input), desc="infer"):
         stem = os.path.splitext(os.path.basename(path))[0]
-        img = Image.open(path).convert("RGB")
-        if args.max_side and max(img.size) > args.max_side:
-            s = args.max_side / max(img.size)
-            img = img.resize((round(img.size[0] * s), round(img.size[1] * s)), Image.BICUBIC)
-        x = _to_tensor(img)[None].to(device)
-
-        mask, src = None, "pred"
         mp = find_mask(args.masks, stem) if args.masks else None
-        if mp:
-            m = Image.open(mp).convert("L").resize(img.size, Image.NEAREST)
-            mask = (_to_tensor(m)[None] > 0.5).float().to(device)
-            src = "gt"
-        elif not model.has_detector:
+        if mp is None and not remover.has_detector:
             print(f"skip {path}: no mask found and model has no detector")
             continue
-
-        with autocast(device, *amp):
-            out = model(x, mask, src)
-        y = out["output"].float().clamp(0, 1)[0]
-        save_image(y, os.path.join(args.output, f"{stem}.png"))
-        guide = out["guide_mask"].float()[0]
-        save_image(guide, os.path.join(args.output, f"{stem}_mask.png"))
+        r = remover(load_image(path), load_image(mp, "L") if mp else None, args.max_side)
+        save_image(r["output"], os.path.join(args.output, f"{stem}.png"))
+        save_image(r["mask"], os.path.join(args.output, f"{stem}_mask.png"))
         if args.save_comparison:
-            save_comparison([("Input", to_uint8(x[0])), ("Mask", to_uint8(guide)), ("Output", to_uint8(y))],
+            save_comparison([("Input", to_uint8(r["input"])), ("Mask", to_uint8(r["mask"])),
+                             ("Output", to_uint8(r["output"]))],
                             os.path.join(args.output, f"{stem}_comparison.png"))
     print(f"Saved results to {args.output}")
 
 
 if __name__ == "__main__":
-    np.seterr(all="ignore")
     main()
