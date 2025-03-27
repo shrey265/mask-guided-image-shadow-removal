@@ -158,6 +158,32 @@ python infer.py --checkpoint best.pth --input my_photos/ --output restored/ --gp
 python infer.py --checkpoint best.pth --input my_photos/ --masks my_masks/ --output restored/ --gpu 0
 ```
 
+## Web UI (run on the server, open on your laptop)
+
+A small web page for testing the model on your own photos.
+
+- **Your image:** drag, drop or paste a photo. The mask is optional; without one, it's predicted.
+- **ISTD examples:** pick any test image and see PSNR, SSIM and MAE against its ground truth.
+- **Results:** a before/after slider, the mask used, and a download button.
+
+```bash
+python -m pip install -r requirements-web.txt -c constraints.txt      # once (fastapi, uvicorn)
+
+# on the server
+python webapp/server.py --data-dir /mnt/shadow --gpu 2 \
+    --checkpoint outputs/<run>/checkpoints/best.pth
+
+# on your laptop
+ssh -N -L 8000:localhost:8000 user@server
+# open http://localhost:8000
+```
+
+- **Access:** the server listens on `127.0.0.1` only, so the page can only be reached through your SSH tunnel. Nothing is exposed to the network.
+- **Uploads:** processed in memory and discarded. Add `--save` to keep inputs and results in `<data-dir>/webapp/`.
+- **Image size:** `--max-side` (default 2048) caps the longer side to protect GPU memory. `--max-upload-mb` (default 25) limits the file size.
+- **Network access:** `--host 0.0.0.0` makes the page reachable from other machines. A random access token is then required and printed in the startup URL.
+- **No internet needed:** the page loads nothing from outside the server.
+
 ## 7. Saved results
 
 ```
@@ -234,8 +260,10 @@ After training, copy the numbers from `results/test_gt/report.md`:
 │   ├── metrics.py               PSNR, SSIM, MAE (RGB & LAB), detection metrics
 │   ├── analysis.py              shadow-intensity / scene-condition analysis and plots
 │   ├── evaluation.py            evaluation loop, report writer
+│   ├── inference.py             single-image inference (infer.py + web UI)
 │   └── utils.py                 config, single-GPU selection, AMP, checkpoints, images
 ├── train.py  test.py  infer.py  check_env.py
+├── webapp/server.py, webapp/static/index.html   local web UI
 ├── scripts/download_istd.sh  scripts/run_pipeline.sh
 ├── setup_env.sh  requirements.txt  requirements-torch.txt  constraints.txt
 ```

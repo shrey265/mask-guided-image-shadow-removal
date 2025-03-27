@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shadow Removal</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f6f6f4;
+    --surface: #ffffff;
+    --surface-2: #f0efec;
+    --border: #e4e3df;
+    --text: #0b0b0b;
+    --text-2: #52514e;
+    --text-3: #7a7974;
+    --accent: #2a78d6;
+    --accent-ink: #ffffff;
+    --accent-soft: #e3eefb;
+    --good: #0f7b3f;
+    --bad: #b42318;
+    --danger-bg: #fdecea;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --border: #2e2e2b;
+      --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86;
+      --accent: #3987e5; --accent-ink: #ffffff; --accent-soft: #1d2a3a;
+      --good: #4cc38a; --bad: #f97066; --danger-bg: #3a1d1b;
+      --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --surface-2: #232321; --border: #2e2e2b;
+    --text: #f0efec; --text-2: #c3c2b7; --text-3: #8f8e86;
+    --accent: #3987e5; --accent-ink: #ffffff; --accent-soft: #1d2a3a;
+    --good: #4cc38a; --bad: #f97066; --danger-bg: #3a1d1b;
+    --shadow: none;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 40px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 18px; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -.01em; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-size: 12px; color: var(--text-2); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; white-space: nowrap;
+  }
+
+  .layout { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 16px; align-items: start; }
+  .layout > * { min-width: 0; }
+  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+           box-shadow: var(--shadow); }
+  .controls { padding: 14px; position: sticky; top: 12px; }
+  @media (max-width: 900px) { .controls { position: static; } }
+
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--surface-2); border-radius: 8px;
+          padding: 3px; margin-bottom: 14px; }
+  .tabs button { border: 0; background: transparent; padding: 7px 8px; border-radius: 6px; cursor: pointer;
+                 color: var(--text-2); }
+  .tabs button[aria-selected="true"] { background: var(--surface); color: var(--text); font-weight: 600;
+                                       box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .tab-panel[hidden] { display: none; }
+
+  .field { margin-bottom: 14px; }
+  .label { display: block; font-weight: 600; margin-bottom: 6px; }
+  .hint { color: var(--text-3); font-size: 12px; margin-top: 4px; }
+
+  .drop {
+    position: relative; display: flex; align-items: center; gap: 12px; padding: 12px; min-height: 84px;
+    border: 1.5px dashed var(--border); border-radius: 8px; cursor: pointer; background: var(--surface-2);
+    transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.drag { border-color: var(--accent); background: var(--accent-soft); }
+  .drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .drop .thumb { width: 60px; height: 60px; border-radius: 6px; object-fit: cover; flex: none;
+                 background: var(--border); }
+  .drop .thumb:not([src]) { display: none; }
+  .drop .txt { min-width: 0; }
+  .drop .txt b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .drop .txt span { color: var(--text-3); font-size: 12px; }
+  .drop.small { min-height: 60px; }
+  .drop.small .thumb { width: 40px; height: 40px; }
+  .linkbtn { border: 0; background: none; color: var(--accent); padding: 0; cursor: pointer; font-size: 12px; }
+
+  select, input[type="search"] {
+    width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+  }
+  .seg { display: flex; gap: 6px; }
+  .seg label { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 6px;
+               border: 1px solid var(--border); border-radius: 8px; cursor: pointer; color: var(--text-2); }
+  .seg input { accent-color: var(--accent); margin: 0; }
+  .seg label:has(input:checked) { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
+  .seg label.disabled { opacity: .5; cursor: not-allowed; }
+
+  .primary {
+    width: 100%; border: 0; border-radius: 8px; padding: 10px 14px; background: var(--accent);
+    color: var(--accent-ink); font-weight: 600; cursor: pointer;
+  }
+  .primary:disabled { opacity: .5; cursor: not-allowed; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; max-height: 420px; overflow-y: auto;
+          padding: 2px; }
+  .grid button { border: 2px solid transparent; padding: 0; border-radius: 6px; overflow: hidden; cursor: pointer;
+                 background: var(--surface-2); position: relative; aspect-ratio: 4 / 3; }
+  .grid button img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .grid button span { position: absolute; left: 4px; bottom: 3px; font-size: 11px; color: #fff;
+                      text-shadow: 0 1px 2px rgba(0,0,0,.8); }
+  .grid button:hover, .grid button:focus-visible { border-color: var(--accent); outline: none; }
+  .grid button.active { border-color: var(--accent); }
+  .more { margin-top: 8px; width: 100%; padding: 7px; border: 1px solid var(--border); border-radius: 8px;
+          background: var(--surface); cursor: pointer; }
+  .note { color: var(--text-3); font-size: 12px; margin: 6px 0 0; }
+
+  .results { padding: 14px; min-height: 420px; position: relative; }
+  .empty { display: grid; place-items: center; text-align: center; min-height: 390px; color: var(--text-3); }
+  .empty b { display: block; color: var(--text-2); font-size: 15px; margin-bottom: 4px; }
+
+  .error { background: var(--danger-bg); color: var(--bad); border-radius: 8px; padding: 10px 12px;
+           margin-bottom: 12px; }
+  .error[hidden] { display: none; }
+
+  .busy { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--surface) 70%, transparent);
+          border-radius: var(--radius); z-index: 5; }
+  .busy[hidden] { display: none; }
+  .spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--border);
+             border-top-color: var(--accent); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .res-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;
+              margin-bottom: 10px; }
+  .res-head h2 { font-size: 15px; margin: 0; }
+  .stats { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .compare { position: relative; width: 100%; border-radius: 8px; overflow: hidden; background: var(--surface-2);
+             user-select: none; --pos: 50%; }
+  .compare img { display: block; width: 100%; height: auto; }
+  .compare .before { position: absolute; inset: 0; width: 100%; height: 100%; clip-path: inset(0 calc(100% - var(--pos)) 0 0); }
+  .compare .divider { position: absolute; top: 0; bottom: 0; left: var(--pos); width: 2px; margin-left: -1px;
+                      background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); pointer-events: none; }
+  .compare .knob { position: absolute; top: 50%; left: var(--pos); width: 30px; height: 30px; margin: -15px 0 0 -15px;
+                   border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); pointer-events: none;
+                   display: grid; place-items: center; color: #333; font-size: 13px; }
+  .compare input[type="range"] { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0;
+                                 cursor: ew-resize; }
+  .compare .tag { position: absolute; top: 8px; font-size: 12px; color: #fff; background: rgba(0,0,0,.55);
+                  padding: 2px 8px; border-radius: 999px; pointer-events: none; }
+  .compare .tag.l { left: 8px; } .compare .tag.r { right: 8px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+  .tile figure { margin: 0; }
+  .tile img { width: 100%; display: block; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); }
+  .tile figcaption { font-size: 12px; color: var(--text-2); margin-top: 4px; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--border);
+         border-radius: 8px; background: var(--surface); color: var(--text); text-decoration: none; cursor: pointer; font-size: 13px; }
+  .btn:hover { border-color: var(--accent); }
+
+  .metrics { margin-top: 14px; overflow-x: auto; }
+  .metrics h3 { font-size: 13px; margin: 0 0 6px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { color: var(--text-2); font-weight: 600; font-size: 12px; }
+  td .arrow { color: var(--text-3); margin: 0 4px; }
+  td .delta { font-size: 12px; margin-left: 6px; }
+  td .delta.up { color: var(--good); } td .delta.down { color: var(--bad); }
+  .saved { color: var(--text-3); font-size: 12px; margin-top: 8px; word-break: break-all; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Shadow Removal</h1>
+    <div class="meta" id="meta"><span class="chip">connecting…</span></div>
+  </header>
+
+  <div class="layout">
+    <!-- ------------------------------------------------------------ controls -->
+    <section class="panel controls" aria-label="Input">
+      <div class="tabs" role="tablist">
+        <button role="tab" id="tab-upload" aria-selected="true" aria-controls="panel-upload">Your image</button>
+        <button role="tab" id="tab-examples" aria-selected="false" aria-controls="panel-examples">ISTD examples</button>
+      </div>
+
+      <div class="tab-panel" id="panel-upload" role="tabpanel" aria-labelledby="tab-upload">
+        <div class="field">
+          <span class="label">Image</span>
+          <label class="drop" id="drop-image">
+            <input type="file" id="file-image" accept="image/*">
+            <img class="thumb" alt="">
+            <div class="txt"><b>Drop, paste or click to choose</b><span>JPG, PNG, WebP…</span></div>
+          </label>
+        </div>
+
+        <div class="field">
+          <span class="label">Shadow mask <span style="font-weight:400;color:var(--text-3)">(optional)</span></span>
+          <label class="drop small" id="drop-mask">
+            <input type="file" id="file-mask" accept="image/*">
+            <img class="thumb" alt="">
+            <div class="txt"><b>No mask: it will be detected</b><span>White = shadow, same size as the image</span></div>
+          </label>
+          <button class="linkbtn" id="clear-mask" hidden>Remove mask</button>
+          <div class="hint" id="mask-hint"></div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="max-side">Processing size</label>
+          <select id="max-side">
+            <option value="512">512 px (fastest)</option>
+            <option value="768">768 px</option>
+            <option value="1024" selected>1024 px</option>
+            <option value="1600">1600 px</option>
+            <option value="0">Original (up to server limit)</option>
+          </select>
+          <div class="hint">The longer side is scaled down to this before processing.</div>
+        </div>
+
+        <button class="primary" id="run" disabled>Remove shadow</button>
+      </div>
+
+      <div class="tab-panel" id="panel-examples" role="tabpanel" aria-labelledby="tab-examples" hidden>
+        <div class="field">
+          <span class="label">Mask given to the model</span>
+          <div class="seg" role="radiogroup">
+            <label><input type="radio" name="msrc" value="gt" checked> Ground truth</label>
+            <label id="pred-label"><input type="radio" name="msrc" value="pred"> Predicted</label>
+          </div>
+          <div class="hint">Scores always use the ground-truth image and mask.</div>
+        </div>
+        <div class="field">
+          <input type="search" id="search" placeholder="Filter by name, e.g. 95-" aria-label="Filter examples">
+        </div>
+        <div class="grid" id="grid" aria-label="ISTD test images"></div>
+        <button class="more" id="more" hidden>Load more</button>
+        <p class="note" id="ex-note"></p>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------ results -->
+    <section class="panel results" aria-label="Result" aria-live="polite">
+      <div class="busy" id="busy" hidden><div class="spinner" role="status" aria-label="Processing"></div></div>
+      <div class="error" id="error" hidden></div>
+
+      <div class="empty" id="empty">
+        <div><b>No result yet</b>Upload a photo, or pick an ISTD test image to see scores against the ground truth.</div>
+      </div>
+
+      <div id="result" hidden>
+        <div class="res-head">
+          <h2 id="res-title">Result</h2>
+          <div class="stats" id="stats"></div>
+        </div>
+
+        <div class="compare" id="compare">
+          <img id="cmp-after" alt="Shadow removed">
+          <img id="cmp-before" class="before" alt="Original with shadow">
+          <div class="divider"></div>
+          <div class="knob" aria-hidden="true">↔</div>
+          <span class="tag l">Original</span><span class="tag r">Shadow removed</span>
+          <input type="range" id="cmp-range" min="0" max="100" value="50" aria-label="Before/after comparison">
+        </div>
+
+        <div class="tiles" id="tiles"></div>
+
+        <div class="actions">
+          <a class="btn" id="dl-output" download="shadow_removed.png">Download result</a>
+          <a class="btn" id="dl-mask" download="shadow_mask.png">Download mask</a>
+        </div>
+
+        <div class="metrics" id="metrics" hidden>
+          <h3>Scores against the ground truth (original → model)</h3>
+          <table>
+            <thead><tr><th>Region</th><th>PSNR (dB) ↑</th><th>SSIM ↑</th><th>MAE LAB ↓</th></tr></thead>
+            <tbody id="metrics-body"></tbody>
+          </table>
+        </div>
+        <div class="saved" id="saved" hidden></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const token = new URLSearchParams(location.search).get("token") || "";
+  const state = { info: null, image: null, mask: null, offset: 0, total: 0, query: "", busy: false };
+
+  // ------------------------------------------------------------------ api
+  async function api(path, opts = {}) {
+    const headers = Object.assign({}, opts.headers || {});
+    if (token) headers["X-Token"] = token;
+    const res = await fetch(path, Object.assign({}, opts, { headers }));
+    let body = null;
+    try { body = await res.json(); } catch (_) { /* non-JSON error */ }
+    if (!res.ok) throw new Error((body && body.detail) || `${res.status} ${res.statusText}`);
+    return body;
+  }
+  const withToken = (url) => token ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : url;
+
+  function showError(msg) { const e = $("error"); e.textContent = msg; e.hidden = !msg; }
+  function setBusy(on) {
+    state.busy = on; $("busy").hidden = !on;
+    $("run").disabled = on || !state.image;
+  }
+
+  // ------------------------------------------------------------------ info
+  async function loadInfo() {
+    try {
+      const i = await api("/api/info");
+      state.info = i;
+      const chips = [
+        i.checkpoint,
+        i.epoch != null ? `epoch ${i.epoch}` : null,
+        i.best_val != null ? `val ${i.best_metric} ${i.best_val.toFixed(2)}` : null,
+        i.device, i.amp,
+        i.has_detector ? "detector on" : "mask required",
+        i.saving ? "saving uploads" : "uploads not stored",
+      ].filter(Boolean);
+      $("meta").replaceChildren(...chips.map((t) => Object.assign(document.createElement("span"), { className: "chip", textContent: t })));
+      if (!i.has_detector) {
+        $("mask-hint").textContent = "This model has no shadow detector, so a mask is required.";
+        $("drop-mask").querySelector(".txt b").textContent = "Mask required";
+        const pl = $("pred-label"); pl.classList.add("disabled"); pl.querySelector("input").disabled = true;
+      }
+      $("ex-note").textContent = i.examples_note || "";
+    } catch (e) {
+      $("meta").replaceChildren(Object.assign(document.createElement("span"), { className: "chip", textContent: "offline" }));
+      showError(`Could not reach the server: ${e.message}`);
+    }
+  }
+
+  // ------------------------------------------------------------------ tabs
+  function selectTab(which) {
+    for (const t of ["upload", "examples"]) {
+      $(`tab-${t}`).setAttribute("aria-selected", String(t === which));
+      $(`panel-${t}`).hidden = t !== which;
+    }
+    if (which === "examples" && !$("grid").children.length) loadExamples(true);
+  }
+  $("tab-upload").onclick = () => selectTab("upload");
+  $("tab-examples").onclick = () => selectTab("examples");
+
+  // ------------------------------------------------------------------ file inputs
+  function bindDrop(dropId, inputId, key) {
+    const drop = $(dropId), input = $(inputId);
+    const set = (file) => {
+      if (!file) return;
+      if (!file.type.startsWith("image/")) { showError(`${file.name} is not an image`); return; }
+      state[key] = file;
+      const img = drop.querySelector(".thumb");
+      if (img.src) URL.revokeObjectURL(img.src);
+      img.src = URL.createObjectURL(file);
+      drop.querySelector(".txt b").textContent = file.name;
+      drop.querySelector(".txt span").textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+      if (key === "mask") $("clear-mask").hidden = false;
+      showError("");
+      $("run").disabled = state.busy || !state.image;
+    };
+    input.onchange = () => set(input.files[0]);
+    drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("drag"); });
+    drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
+    drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("drag"); set(e.dataTransfer.files[0]); });
+    return set;
+  }
+  const setImage = bindDrop("drop-image", "file-image", "image");
+  bindDrop("drop-mask", "file-mask", "mask");
+
+  $("clear-mask").onclick = (e) => {
+    e.preventDefault();
+    state.mask = null; $("file-mask").value = "";
+    const drop = $("drop-mask"), img = drop.querySelector(".thumb");
+    if (img.src) URL.revokeObjectURL(img.src);
+    img.removeAttribute("src");
+    drop.querySelector(".txt b").textContent = state.info && !state.info.has_detector ? "Mask required" : "No mask: it will be detected";
+    drop.querySelector(".txt span").textContent = "White = shadow, same size as the image";
+    $("clear-mask").hidden = true;
+  };
+
+  // paste an image from the clipboard
+  document.addEventListener("paste", (e) => {
+    const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/"));
+    if (item) { selectTab("upload"); setImage(item.getAsFile()); }
+  });
+
+  // ------------------------------------------------------------------ run (upload)
+  $("run").onclick = async () => {
+    if (!state.image || state.busy) return;
+    if (state.info && !state.info.has_detector && !state.mask) { showError("Please add a mask: this model has no detector."); return; }
+    const fd = new FormData();
+    fd.append("image", state.image, state.image.name || "pasted.png");
+    if (state.mask) fd.append("mask", state.mask, state.mask.name || "mask.png");
+    fd.append("max_side", $("max-side").value);
+    setBusy(true); showError("");
+    try {
+      const r = await api("/api/remove", { method: "POST", body: fd });
+      render(r, state.image.name || "Your image");
+    } catch (e) { showError(e.message); }
+    finally { setBusy(false); }
+  };
+
+  // ------------------------------------------------------------------ examples
+  async function loadExamples(reset) {
+    if (reset) { state.offset = 0; $("grid").replaceChildren(); }
+    try {
+      const q = encodeURIComponent(state.query);
+      const r = await api(`/api/examples?q=${q}&offset=${state.offset}&limit=60`);
+      state.total = r.total; state.offset += r.items.length;
+      for (const name of r.items) {
+        const b = document.createElement("button");
+        b.title = name; b.dataset.name = name; b.setAttribute("aria-label", `Run ISTD example ${name}`);
+        const img = document.createElement("img");
+        img.loading = "lazy"; img.alt = "";  // name is shown in the label; button title has it too
+        img.src = withToken(`/api/examples/${encodeURIComponent(name)}/thumb`);
+        const s = document.createElement("span"); s.textContent = name;
+        b.append(img, s);
+        b.onclick = () => runExample(name, b);
+        $("grid").append(b);
+      }
+      $("more").hidden = state.offset >= state.total;
+      if (!state.total) $("ex-note").textContent = state.query ? "No examples match." : (state.info?.examples_note || "No examples.");
+      else $("ex-note").textContent = `${state.total} test images${state.query ? " match" : ""}. Click one to run it.`;
+    } catch (e) { showError(e.message); }
+  }
+  $("more").onclick = () => loadExamples(false);
+  let searchTimer;
+  $("search").oninput = (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { state.query = e.target.value.trim(); loadExamples(true); }, 250);
+  };
+
+  async function runExample(name, btn) {
+    if (state.busy) return;
+    document.querySelectorAll(".grid button.active").forEach((b) => b.classList.remove("active"));
+    btn?.classList.add("active");
+    const src = document.querySelector('input[name="msrc"]:checked').value;
+    setBusy(true); showError("");
+    try {
+      const r = await api(`/api/examples/${encodeURIComponent(name)}/run?mask_source=${src}&max_side=0`, { method: "POST" });
+      render(r, `ISTD ${name}`);
+    } catch (e) { showError(e.message); }
+    finally { setBusy(false); }
+  }
+
+  // ------------------------------------------------------------------ render
+  function chip(text) { return Object.assign(document.createElement("span"), { className: "chip", textContent: text }); }
+
+  function tile(src, caption) {
+    const d = document.createElement("div"); d.className = "tile";
+    const f = document.createElement("figure");
+    const img = document.createElement("img"); img.src = src; img.alt = caption;
+    const c = document.createElement("figcaption"); c.textContent = caption;
+    f.append(img, c); d.append(f); return d;
+  }
+
+  const fmt = (v, nd) => (v == null ? "–" : v.toFixed(nd));
+  function metricCell(inp, out, nd, higherBetter) {
+    const td = document.createElement("td");
+    if (inp == null || out == null) { td.textContent = "–"; return td; }
+    const d = out - inp, good = higherBetter ? d > 0 : d < 0;
+    td.innerHTML = `${fmt(inp, nd)}<span class="arrow">→</span><b>${fmt(out, nd)}</b>`;
+    const s = document.createElement("span");
+    s.className = `delta ${good ? "up" : "down"}`;
+    s.textContent = `${d > 0 ? "+" : ""}${d.toFixed(nd)}`;
+    td.append(s); return td;
+  }
+
+  function render(r, title) {
+    $("empty").hidden = true; $("result").hidden = false;
+    $("res-title").textContent = title;
+    $("stats").replaceChildren(
+      chip(`${r.width}×${r.height}`), chip(`${r.time_ms.toFixed(0)} ms`),
+      chip(r.mask_source === "gt" ? (r.metrics ? "GT mask" : "your mask") : "detected mask"));
+
+    $("cmp-before").src = r.input; $("cmp-after").src = r.output;
+    $("cmp-range").value = 50; $("compare").style.setProperty("--pos", "50%");
+
+    const tiles = [tile(r.input, "Original"),
+                   tile(r.mask, r.mask_source === "gt" ? "Mask used" : "Detected mask"),
+                   tile(r.output, "Shadow removed")];
+    if (r.gt) tiles.push(tile(r.gt, "Ground truth (shadow-free)"));
+    if (r.gt_mask && r.mask_source !== "gt") tiles.splice(2, 0, tile(r.gt_mask, "Ground-truth mask"));
+    $("tiles").replaceChildren(...tiles);
+
+    const base = (title || "image").replace(/[^A-Za-z0-9_.-]+/g, "_").replace(/\.[^.]+$/, "");
+    Object.assign($("dl-output"), { href: r.output, download: `${base}_shadow_removed.png` });
+    Object.assign($("dl-mask"), { href: r.mask, download: `${base}_mask.png` });
+
+    if (r.metrics) {
+      const m = r.metrics.model, i = r.metrics.input;
+      const rows = [["Whole image", "all"], ["Shadow region", "shadow"], ["Non-shadow region", "nonshadow"]];
+      $("metrics-body").replaceChildren(...rows.map(([label, k]) => {
+        const tr = document.createElement("tr");
+        const th = document.createElement("td"); th.textContent = label; tr.append(th);
+        tr.append(metricCell(i[`psnr_${k}`], m[`psnr_${k}`], 2, true),
+                  metricCell(i[`ssim_${k}`], m[`ssim_${k}`], 4, true),
+                  metricCell(i[`mae_lab_${k}`], m[`mae_lab_${k}`], 2, false));
+        return tr;
+      }));
+      $("metrics").hidden = false;
+    } else {
+      $("metrics").hidden = true;
+    }
+    $("saved").hidden = !r.saved_to;
+    $("saved").textContent = r.saved_to ? `Saved on server: ${r.saved_to}` : "";
+    $("result").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  $("cmp-range").oninput = (e) => $("compare").style.setProperty("--pos", `${e.target.value}%`);
+
+  loadInfo();
+})();
+</script>
+</body>
+</html>

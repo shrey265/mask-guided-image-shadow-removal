@@ -1,0 +1,5 @@
+# Web UI dependencies (webapp/server.py). None of these depend on torch.
+#   python -m pip install -r requirements-web.txt -c constraints.txt
+fastapi>=0.110,<1.0
+uvicorn>=0.29
+python-multipart>=0.0.9

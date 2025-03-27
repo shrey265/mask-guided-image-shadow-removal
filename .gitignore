@@ -18,3 +18,4 @@ runs/
 .vscode/
 .idea/
 .DS_Store
+webapp_results/
